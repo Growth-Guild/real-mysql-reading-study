@@ -104,3 +104,25 @@ INSERT INTO tab_innodb (foo) VALUES (1), (2), (3);
 * InnoDB의 잠금은 레코드를 잠그는 것이 아니라 인덱스를 잠그는 방식으로 처리되므로, 변경해야할 레코드를 찾기 위해 검색한 인덱스의 레코드를 모두 락을 걸어야 한다.
 * UPDATE 문장을 위한 적절한 인덱스가 준비돼 있지 않다면 각 클라이언트 간의 동시성이 상당히 떨어져서 한 세션에서 UPDATE 작업을 하는 중에는 다른 클라이언트는 그 테이블을 업데이트하지 못하고 기다려야 하는 상황이 발생한다.
 > employee라는 테이블에 first_name 컬럼만 인덱스가 걸려있는 상황에서 first_name이 'hello'이고, last_name이 'world'인 사람을 업데이트하면 last_name 컬럼은 인덱스가 없기 때문에 first_name이 'hello'인 레코드가 모두 잠긴다.
+
+## MySQL의 격리 수준
+* 트랜잭션의 격리 수준이란 여러 트랜잭션이 동시에 처리될 때 특정 트랜잭션이 다른 트랜잭션에서 변경하거나 조회하는 데이터를 볼 수 있게 허용할지 말지를 결정하는 것이다.
+* 격리 수준은 크게 아래 4가지로 나뉜다.
+  * READ UNCOMMITTED
+  * READ COMMITTED
+  * REPEATABLE READ
+  * SERIALIZABLE
+* 격리 수준에서 순서대로 뒤로 갈수록 트랜잭션 같의 데이터 격리 정도가 높아지며, 동시 처리 성능이 떨어지는 것이 일반적이다.
+  * 격리 수준이 높아질수록 MySQL 서버의 처리 성능이 많이 떨어질 것 같지만, 실제로는 SERIALIZABLE 격리 수준이 아니라면 크게 성능의 개선이나 저하는 발생하지 않는다.
+* REPEATABLE READ 격리 수준에서는 PHANTOM READ가 발생할 수 있지만, InnoDB에서는 REPEATABLE READ 격리 수준에서도 PHANTOM READ가 발생하지 않는다.
+    
+|                  | DIRTY READ | NON_REPEATABLE READ | PHANTOM READ    |
+|------------------|------------|---------------------|-----------------|
+| READ UNCOMMITTED | 발생         | 발생                  | 발생              |
+| READ COMMITED    | 없음         | 발생                  | 발생              |
+| REPEATABLE READ  | 없음         | 없음                  | 발생 (InnoDB는 없음) |
+| SERIALIZABLE     | 없음         | 없음                  | 없음              |
+
+* 일반적인 온라인 서비스 용도의 데이터베이스는 READ COMMITTED와 REPEATABLE READ 중 하나를 사용한다.
+  * 오라클 같은 DBMS에서는 주로 READ COMMITTED 수준을 많이 사용한다.
+  * MySQL에서는 REPEATABLE READ 수준을 주로 사용한다.
