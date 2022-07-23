@@ -218,3 +218,38 @@ JDBC 라이브러리가 자체적으로 레코드를 버퍼링하는 이유는 �
 * MySQL 8.0 에서는 GROUP BY가 필요한 경우 내부적으로 GROUP BY 절의 컬럼들로 구성된 유니크 인덱스를 가진 임시 테이블을 만들어서 중복 제거와 집합 함수 연산을 수행한다.
   * 조인 결과를 한 건씩 가져와서 임시 테이블에서 중복 체크를 하면서 INSERT 또는 UPDATE를 실행한다.
 * MySQL 8.0 버전에서도 GROUP BY와 ORDER BY가 같이 사용되면 명시적으로 정렬 작업을 실행한다. 이때는 Extra 컬럼에 "Using temporary"와 함께 "Using filesort"가 표시된다.
+
+### DISTINCT 처리
+* 집합 함수와 같이 DISTINCT가 사용되는 쿼리의 실행 계획에서 DISTINCT 처리가 인덱스를 사용하지 못할 떄는 항상 임시 테이블이 필요하다.
+  * 하지만 Extra 컬럼에는 "Using temporary" 메시지가 출력되지 않는다.
+
+#### SELECT DISTINCT ...
+* 단순한 SELECT 쿼리에서 유니크한 레코드만 가져오고자 하면 SELECT DISTINCT 형태의 쿼리를 사용하는데, 이 경우에는 GROUP BY와 동일한 방식으로 처리된다.
+* MySQL 8.0 버전부터는 GROUP BY를 수행하는 쿼리에 ORDER BY 절이 없으면 정렬을 사용하지 않기 때문에 다음의 두 쿼리는 내부적으로 같은 작업을 수행한다.
+```sql
+SELECT DISTINCT emp_no FROM salaries;
+SELECT emp_no FROM salaries GROUP BY emp_no;
+```
+* DISTINCT는 SELECT하는 레코드를 유니크하게 SELECT하는 것이지, 특정 컬럼만 유니크하게 조회하는 것이 아니다.
+```sql
+SELECT DISTINCT first_name, last_name FROM employees;
+-- 위 쿼리는 (first_name, last_name) 조합 전체가 유니크한 레코드를 가져온다.
+
+SELECT DISTINCT(first_name), last_name FROM employees;
+-- 위 쿼리는 MySQL 서버가 뒤의 괄호를 의미 없이 사용된 괄호로 해석하고 제거해 버린다. DISTINCT는 함수가 아니므로 그 뒤의 괄호는 의미가 없다.
+```
+
+#### 집합 함수와 함께 사용된 DISTINCT
+* COUNT(), MIN(), MAX() 같은 집합 함수 내에서 DISTINCT 키워드가 사용될 수 있는데, 이 경우에는 집합 함수 내에서 인자로 전달된 컬럼 값이 유니크한 것들을 가져온다.
+```sql
+SELECT COUNT(DISTINCT s.salary)
+FROM employees e, salaries s
+WHERE e.emp_no = s.emp_no
+AND e.emp_no BETWEEN 100001 AND 100100;
+```
+* 위 쿼리는 내부적으로 "COUNT(DISTINCT s.salary)"를 처리하기 위해 임시 테이블을 사용한다.
+* 하지만 이 쿼리의 실행 계획에서는 임시 테이블을 사용한다는 메시지는 표시되지 않는다.
+* 위 쿼리는 employees 테이블과 salaries 테이블을 조인한 결과에서 salary 컬럼의 값만 저장하기 위한 임시 테이블을 만들어서 사용한다.
+  * 임시 테이블의 salary 컬럼에는 유니크 인덱스가 생성되기 때문에 레코드 건수가 많아진다면 상당히 느려질 수 있는 형태의 쿼리다.
+* 만약 COUNT(DISTINCT e.last_name)를 하나 더 추가한다면 e.last_name 컬럼의 값을 저장하는 또 다른 임시 테이블이 필요하므로 전체적으로 2개의 임시 테이블을 사용한다.
+* 인덱스된 컬럼에 대해 DISTINCT 처리를 수행할 수 있을 떄는 인덱스를 풀 스캔하거나 레인지 스캔하면서 임시 테이블 없이 최적화된 처리를 수행할 수 있다.
