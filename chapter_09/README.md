@@ -279,6 +279,7 @@ AND e.emp_no BETWEEN 100001 AND 100100;
   * UNION이나 UNION DISTINCT가 사용된 쿼리 (select type 컬럼이 UNION RESULT인 경우)
   * 쿼리의 실행 계획해서 select_type이 DERIVED인 쿼리
 * 임시 테이블을 사용하는지는 Extra 컬럼에 "Using temporary"라는 메시지가 표시되는지 확인하면 된다.
+* "Using temporary"가 한 번 표시됐다고 해서 임시 테이블이 하나만 사용했다는 것을 의미하지는 않는다.
 * "Using temporary"라는 메시지가 표시되지 않을 때도 임시 테이블을 사용할 수 있는데, 위의 조건에서 마지막 3개 패턴이 그러한 예다.
 * 첫 번째부터 네 번째까지의 쿼리 패턴은 유니크 인덱스를 가지는 내부 임시 테이블이 생성된다.
 * 마지막 쿼리 패턴은 유니크 인덱스가 없는 내부 임시 테이블이 생성된다.
@@ -288,6 +289,3 @@ AND e.emp_no BETWEEN 100001 AND 100100;
 * UNION이나 UNION ALL에서 SELECT되는 컬럼 중에서 길이가 512바이트 이상인 크기의 컬럼이 있는 경우
 * GROUP BY나 DISTINCT 컬럼에서 512바이트 이상인 크기의 컬럼이 있는 경우
 * 메모리 임시 테이블의 크기가 (MEMORY 스토리지 엔진에서) tmp_table_size 또는 max_heap_table_size 시스템 변수보다 크거나 (TempTable 스토리지 엔진에서) temptable_max_ram 시스템 변수 값보다 큰 경우
-
-#### 임시 테이블 주의 사항
-* "Using temporary"가 한 번 표시됐다고 해서 임시 테이블이 하나만 사용했다는 것을 의미하지는 않는다.
