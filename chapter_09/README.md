@@ -350,3 +350,19 @@ SQL에서 OR로 연결된 경우에는 둘 중 하나라도 제대로 인덱스�
 
 ### 인덱스 머지 - 정렬 후 합집합 (index_merge_sort_union)
 * 인덱스 머지 작업을 하는 도중에 결과의 정렬이 필요한 경우 MySQL 서버는 인덱스 머지 최적화의 'Sort union' 알고리즘을 사용한다.
+
+### 세미 조인 (semijoin)
+* 다른 테이블과 실제 조인을 수행하지는 않고, 단지 다른 테이블에서 조건에 일치하는 레코드가 있는지 없는지만 체크하는 형태의 쿼리를 세미 조인이라고 한다.
+```sql
+SELECT *
+FROM employee e
+WHERE e.emp_no IN
+    (SELECT de.emp_no FROM dept_emp de WHERE de.from_date='1995-01-01');
+```
+* 일반적으로 dept_emp 테이블을 조회하는 서브 쿼리 부분이 먼저 실행되고 그다음 employee 테이블에서 일치하는 레코드만 검색할 것으로 예상하지만, 세미 조인 최적화가 없었을 때는 employees 테이블을 풀 스캔하면서 한 건 한 건 서브쿼리의 조건에 일치하는지 비교하게 된다.
+* MySQL 서버 8.0 버전부터 세미 조인 쿼리의 성능을 개선하기 위한 최적화 전략은 아래와 같다.
+  * Table Pull-out
+  * Duplicate Weed-out
+  * First Match
+  * Loose Scan
+  * Materialization
