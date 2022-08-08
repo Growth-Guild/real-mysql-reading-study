@@ -488,3 +488,51 @@ WHERE derived_table.hire_date = '1986-04-03';
 * 조인 조합 중에서 최소 비용의 실행 계획을 하나 선정하고 부분 실행 계획을 반복적으로 조합하여 최적화하는 방법이다.
 * Greedy 검색 알고리즘은 optimizer_search_depth 시스템 변수에 설정된 값에 따라 조인 최적화의 비용이 상당히 줄어들 수 있다.
 
+## 쿼리 힌트
+* MySQL 서버에서 사용 가능한 쿼리 힌트는 다음과 같이 2가지로 구분할 수 있다.
+  * 인덱스 힌트
+  * 옵티마이저 힌트
+* 인덱스 힌트는 예전 버전의 MySQL 서버에서 사용되어 오던 "USE INDEX" 같은 힌트를 의미한다.]
+* 옵티마이저 힌트는 MySQL 5.6버전부터 새롭게 추가되기 시작한 힌트다.
+
+### 인덱스 힌트
+* "STRAIGHT_JOIN"과 "USE INDEX" 등을 포함한 인덱스 힌트들은 모두 MySQL 서버에 옵티마이저 힌트가 도입되기 전에 사용되던 기능들이다.
+* 이는 ANSI-SQL 표준 문법을 준수하지 못한다.
+* MySQL 5.6 버전부터 추가되기 시작한 옵티마이저 힌트들은 모두 MySQL 서버를 제외한 다른 RDBMS에서는 주석으로 해석하기 때문에 ANSI-SQL 준수하므로 가능하면 인덱스 힌트보다는 옵티마이저 힌트를 사용하는 것이 좋다.
+* 인덱스 힌트는 SELECT와 UPDATE 명령에서만 사용할 수 있다.
+
+#### STRAIGHT_JOIN
+* STRAIGHT_JOIN은 옵티마이저 힌트인 동시에 조인 키워드이다.
+* SELECT, UPDATE, DELETE 쿼리에서 여러 개의 테이블이 조인되는 경우 조인 순서를 고정하는 역할을 한다.
+```sql
+SELECT *
+FROM employees e, dept_emp de, departments d
+WHERE e.emp_no = de.emp_no AND d.dept_no = de.dept_no;
+```
+* 위 쿼리는 3개의 테이블을 조인하지만 옵티마이저가 그때그떄 통계 정보와 쿼리의 조건을 기반으로 최적화하기 때문에 어느 테이블이 드라이빙 테이블이 되고 어느 테이블이 드리븐 테이블이 될지 알 수 없다.
+* 일반적으로 조인을 하기 위한 컬럼들의 인덱스 여부로 조인의 순서가 결정되며, 조인 컬럼의 인텍스에 아무런 문제가 없는 경우에는 레코드가 적은 테이블을 드라이빙으로 선택한다.
+* 위 쿼리의 조인 순서를 변경하려는 경우에는 STRAIGHT_JOIN 힌트를 사용할 수 있다.
+```sql
+SELECT STRAIGHT_JOIN
+e.first_name, e.last_name, d.dept_name
+FROM employees e, dept_emp de, departments d
+WHERE e.emp_no = de.emp_no AND d.dept_no = de.dept_no;
+
+SELECT /*! STRAIGHT_JOIN */
+  e.first_name, e.last_name, d.dept_name
+FROM employees e, dept_emp de, departments d
+WHERE e.emp_no = de.emp_no AND d.dept_no = de.dept_no;
+```
+* 위의 두 쿼리는 힌트의 표기법만 다를 뿐 같은 쿼리다.
+* 인덱스 힌트는 사용해야 하는 위치가 이미 결정됐기 때문에 그 이외의 위치에서는 사용하지 않도록 주의해야 한다.
+* STRAIGHT_JOIN 힌트는 옵티마이저가 FROM 절에 명시된 테이블의 순서대로 조인을 수행하도록 유도한다.
+* 다음 기준에 맞게 조인 순서가 결정되지 않는 경우에만 STRAIGHT_JOIN 힌트로 조인 순서를 조정해주는 것이 좋다.
+  * 임시 테이블(인라인 뷰 또는 파생된 테이블)과 일반 테이블의 조인: 레코드 건수가 작은 쪽을 먼저 읽도록 드라이빙 테이블을 선택하는 것이 좋은데, 옵티마이저가 실행 계획을 제대로 수립하지 못해서 성능 저하가 있는 경우에 사용한다.
+  * 임시 테이블끼리 조인: 임시 테이블(서브쿼리로 파생된 테이블)은 항상 인덱스가 없기 때문에 크기가 작은 테이블을 드라이빙으로 선택하도록 해주는 것이 좋다.
+  * 일반 테이블끼리 조인: 레코드 건수가 적은 테이블을 드라이빙으로 선택해주는 것이 좋다.
+* 레코드 건수라는 것은 인덱스를 사용할 수 있는 WHERE 조건까지 포함해서 그 조건을 만족하는 레코드 건수를 의미하는 것이지, 무조건 테이블 전체의 레코드 건수를 의미하는 것은 아니다.
+* STRAIGHT_JOIN 힌트와 비슷한 역할을 하는 옵티마이저 힌트는 다음과 같다.
+  * JOIN_FIXED_ORDER (STRAIGHT_JOIN 힌트와 동일한 효과를 낸다.)
+  * JOIN_ORDER (STRAIGHT_JOIN과 달리 일부 테이블의 조인 순서에 대해서만 제안하는 힌트다.)
+  * JOIN_INDEX (STRAIGHT_JOIN과 달리 일부 테이블의 조인 순서에 대해서만 제안하는 힌트다.)
+  * JOIN_SUFFIX (STRAIGHT_JOIN과 달리 일부 테이블의 조인 순서에 대해서만 제안하는 힌트다.)
