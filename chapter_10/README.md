@@ -57,3 +57,32 @@
 * MySQL 5.7 버전부터는 각 단위 작업의 비용을 DBMS 관리자가 조정할 수 있게 개선됐다.
 * 코스트 모델은 MySQL 서버가 사용하는 하드웨어와 MySQL 서버 내부적인 처리 방식에 대한 깊이 있는 지식을 필요로 한다. 따라서 잘 모른다면 기본 값을 함부로 변경하지 않는게 낫다.
   * 그동안 기본 설정 값으로도 MySQL 서버는 잘 사용되어 왔다.
+
+## 실행 계획 확인
+* 실행 계획은 EXPLAIN 명령으로 확인할 수 있다.
+
+### 실행 계획 출력 포맷
+* 이전 버전에서는 EXPLAIN EXTENDED 또는 EXPLAIN PARTITIONS 명령이 구분돼 있었지만, 8.0 버전부터는 내용이 통합되어 EXTENDED와 PARTITIONS 옵션이 문법에서 제거됐다.
+* FORMAT 옵션을 통해 실행 계획의 표시 방법을 JSON이나 TREE, 단순 테이블 형태로 선택할 수 있다.
+```sql
+-- 테이블 포맷 표시
+EXPLAIN
+SELECT *
+from employee e
+    INNER JOIN salaries s ON s.emp_no = e.emp_no
+WHERE first_name = 'ABC';
+
+-- 트리 포맷 표시
+EXPLAIN FORMAT=TREE
+SELECT *
+from employee e
+       INNER JOIN salaries s ON s.emp_no = e.emp_no
+WHERE first_name = 'ABC';
+
+-- JSON 포맷 표시
+EXPLAIN FORMAT=JSON
+SELECT *
+from employee e
+       INNER JOIN salaries s ON s.emp_no = e.emp_no
+WHERE first_name = 'ABC';
+```
