@@ -86,3 +86,19 @@ from employee e
        INNER JOIN salaries s ON s.emp_no = e.emp_no
 WHERE first_name = 'ABC';
 ```
+
+### 쿼리의 실행 시간 확인
+* MySQL 8.0 버전부터는 쿼리의 실행 계확과 단계별 소요된 시간 정보를 확인할 수 있는 EXPLAIN ANALYZE 기능이 추가됐다.
+* EXPLAIN ANALYZE 명령은 항상 TREE 포맷으로 보여주기 때문에 EXPLAIN 명령에 FORMAT 옵션을 사용할 수 없다.
+* 실행 순서는 다음 기준으로 읽으면 된다.
+  * 들여쓰기가 같은 레벨에서는 상단에 위치한 라인 먼저 실행
+  * 들여쓰기가 다른 레벨에서는 가장 안쪽에 위치한 라인이 먼저 실행
+* EXPLAIN ANALYZE 명령의 결과는 아래와 같은 정보를 출력한다.
+  * 단계별로 실제 소요된 시간(actual time)
+  * 레코드 건수 (rows)
+  * 반복 횟수 (loops)
+* actual time은 첫 번째 레코드를 가져오는 데 결린 평균 시간을 의미한다.
+* 숫자 값은 마지막 레코드를 가져오는 데 걸린 평균 시간을 의미한다.
+* EXPLAIN ANALYZE 명령은 EXPLAIN 명령과 달리 실제 쿼리를 실행하고 사용된 실행 계획과 소요된 시간을 보여주는 것이다.
+* 쿼리의 실행 시간이 많이 걸리는 쿼리라면 EXPLAIN ANALYZE 명령을 사용하면 쿼리가 완료돼야 실행 계획의 결과를 확인할 수 있다.
+* 쿼리의 실행 계획이 나쁜 경우라면 EXPLAIN 명령으로 먼저 실행 계확만 확인해서 어느 정도 튜닝한 후에 EXPLAIN ANALYZE 명령을 실행하는 것이 좋다.
