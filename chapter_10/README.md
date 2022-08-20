@@ -102,3 +102,142 @@ WHERE first_name = 'ABC';
 * EXPLAIN ANALYZE 명령은 EXPLAIN 명령과 달리 실제 쿼리를 실행하고 사용된 실행 계획과 소요된 시간을 보여주는 것이다.
 * 쿼리의 실행 시간이 많이 걸리는 쿼리라면 EXPLAIN ANALYZE 명령을 사용하면 쿼리가 완료돼야 실행 계획의 결과를 확인할 수 있다.
 * 쿼리의 실행 계획이 나쁜 경우라면 EXPLAIN 명령으로 먼저 실행 계확만 확인해서 어느 정도 튜닝한 후에 EXPLAIN ANALYZE 명령을 실행하는 것이 좋다.
+
+## 실행 계획 분석
+* 실행 순서는 위에서 아래로 순서대로 표시된다 (UNION이나 상관 서브쿼리와 같은 경우 순서대로 표시되지 않을 수 있다).
+* 출력된 실행 계획에서 위쪽에 출력된 결과일수록(id 컬럼의 값이 작을수록) 쿼리의 바깥(Outer) 부분이거나 먼저 접근한 테이블이고, 아래쪽에 출력된 결과일수록(id 컬럼이 클수록) 쿼리의 안쪽(Inner) 부분 또는 나중에 접근한 테이블에 해당한다.
+
+### id 컬럼
+* 하나의 SELECT 문장은 다시 1개 이상의 하위(SUB) SELECT 문장을 포함할 수 있다.
+* id 컬럼은 단위 SELECT 쿼리별로 부여되는 식별자 값이다.
+* 하나의 SELECT 문장 안에서 여러 개의 테이블을 조인하면 조인되는 테이블의 개수만큼 실행 계획 레코드가 출력되지만 같은 id 값이 부여된다.
+* 쿼리 문장이 3개의 단위 SELECT 쿼리로 구성되는 경우에는 각 레코드가 다른 id를 가진다.
+```sql
+-- 같은 id가 부여되는 경우
+SELECT e.emp_no,
+       e.first_name,
+       s.from_date,
+       s.salary
+FROM employees e, salaries s 
+WHERE e.emp_no=s.emp_no LIMIT 10;
+
+-- 각기 다른 id가 부여되는 경우
+SELECT ( (SELECT COUNT(*)FROM employees) + (SELECT COUNT(*) FROM departments) ) AS total_count;
+```
+* id 컬럼은 테이블의 접근 순서를 의미하지 않는다.
+* 테이블의 접근 순서는 EXPLAIN FORMAT=TREE 명령으로 확인해보면 순서를 더 정확히 알 수 있다.
+
+### select_type 컬럼
+* 각 단위 SELECT 쿼리가 어떤 타입의 쿼리인지 표시되는 컬럼이다.
+
+#### SIMPLE
+* UNION이나 서브쿼리를 사용하지 않는 단순한 SELECT 쿼리인 경우 표시된다.
+  * 쿼리에 조인이 포함된 경우에도 마찬가지다.
+* 쿼리가 아무리 복잡하더라도 실행 계획에서 select_type이 SIMPLE인 단위 쿼리는 하나만 존재한다.
+  * 일반적으로 제일 바깥 SELECT 쿼리의 select_type이 SIMPLE로 표시된다.
+
+#### PRIMARY
+* UNION이나 서브쿼리를 가지는 SELECT 쿼리의 실행 계획에서 가장 바깥쪽(Outer)에 있는 단위 쿼리에 표시된다.
+* SIMPLE과 마찬가지로 PRIMARY인 단위 SELECT 쿼리는 하나만 존재하며, 쿼리의 제일 바깥쪽에 있는 SELECT 단위 쿼리가 PRIMARY로 표시된다.
+
+#### UNION
+* UNION으로 결합하는 단위 SELECT 쿼리 가운데 첫 번째를 제외한 두 번째 이후 단위 SELECT 쿼리에 표시된다.
+* UNION의 첫 번째 단위 SELECT는 select_type이 UNION이 아니라 UNION되는 쿼리 결과들을 모아서 저장하는 임시 테이블(DERIVED)이 select_type으로 표시된다.
+
+#### DEPENDENT UNION
+* UNION select_type과 같이 UNION이나 UNION ALL로 집합을 결합하는 쿼리에서 표시된다.
+* DEPENDENT는 UNION이나 UNION ALL로 결합된 단위 쿼리가 외부 쿼리에 의해 영향을 받는 것을 의미한다.
+
+#### UNION RESULT
+* UNION 결과를 담아두는 테이블을 의미한다.
+* MySQL 8.0 이전 버전에서는 UNION ALL이나 UNION(또는 UNION DISTINCT) 쿼리는 모두 UNION의 결과를 임시 테이블로 생성했다.
+* MySQL 8.0 버전부터는 UNION ALL의 경우 임시 테이블을 사용하지 않도록 기능이 개선됐다. (그럼 어디에 저장?)
+* UNION(또는 UNION DISTINCT)은 8.0 버전에서도 여전히 임시 테이블에 결과를 버퍼링한다.
+* UNION RESULT는 실제 쿼리에서 단위 쿼리가 아니가 때문에 별도의 id 값은 부여되지 않는다.
+
+#### SUBQUERY
+* FROM 절 이외에서 사용되는 서브쿼리를 의미한다.
+```sql
+SELECT e.first_name,
+       (SELECT COUNT(*)
+        FROM dept_emp de, dept_manager dm
+        WHERE dm.dept_no = de.dept_no) AS cnt
+FROM employees e WHERE e.emp_no = 10001;
+```
+* FROM 절에서 사용된 서브쿼리는 select_type이 DERIVED로 표시되고, 위의 예제 쿼리와 같이 그 밖의 위치에서 사용된 서브쿼리는 전부 SUBQUERY라고 표시된다.
+
+##### 서브쿼리의 분류
+* 서브쿼리는 사용하는 위치에 따라 각각 다른 이름을 지니고 있다
+  * 중첩된 쿼리(Nested Query): SELECT되는 컬럼에 사용된 서브쿼리를 네스티드 쿼리라고 한다.
+  * 서브쿼리(Subquery): WHERE 절에 사용된 경우에는 일반적으로 그냥 서브쿼리라고 한다.
+  * 파생 테이블(Derived Table): FROM 절에 사용된 서브쿼리를 MySQL에서는 파생 테이블이라고 하며, 일반적으로 RDBMS에서는 Inline View 또는 Sub Select라고 부른다.
+* 서브쿼리는 반환하는 값의 특성에 따라 다음과 같이 구별하기도 한다.
+  * 스칼라 서브쿼리(Scalar Subquery): 하나의 값만 반환하는 쿼리 (컬럼이 단 하나인 레코드 1건만 반환)
+  * 로우 서브쿼리(Row Subquery): 컬럼의 개수와 관계없이 하나의 레코드만 반환하는 쿼리
+
+#### DEPENDENT SUBQUERY
+* 서브쿼리가 바깥쪽(Outer) SELECT 쿼리에서 저으이된 컬럼을 사용하는 경우에 DEPENDENT SUBQUERY라고 표시된다.
+```sql
+SELECT e.first_name
+    (SELECT COUNT(*)
+    FROM dept_emp de, dept_manager dm
+    WHERE dm.dept_no = de.dept_no AND de.emp_no = e.emp_no) AS cnt
+FROM employees e 
+WHERE e.first_name = 'Matt';
+```
+* 위와 같이 안쪽(Inner)의 서브쿼리 결과가 바깥쪽(Outer) SELECT 쿼리의 걸럼에 의존적이기 때문에 DEPENDENT 키워드가 붙는다.
+* DEPENDENT SUBQUERY 또한 외부 쿼리가 먼저 수행된 후 내부 쿼리(서브쿼리)가 실행돼야 하므로 DEPENDENT가 없는 서브쿼리보다는 처리 속도가 느릴 때가 많다.
+
+#### DERIVED
+* MySQL 5.5 버전까지는 서브쿼리가 FROM 절에 사용된 경우 항상 select_type이 DERIVED인 실행 계획을 만들었다.
+* 5.6 버전부터는 옵티마이저 옵션에 따라 FROM 절의 서브쿼리를 외부 쿼리와 통합하는 형태의 최적화가 수행되기도 한다.
+* DERIVED는 단위 SELECT 쿼리의 실행 결과로 메모리나 디스크에 임시 테이블을 생성하는 것을 의미한다. (파생 테이블이라고도 한다)
+* 5.5 버전까지는 파생 테이블에는 인덱스가 전혀 없으므로 다른 테이블과 조인할 때 성능상 불리할 때가 많았지만 5.6 버전부터는 옵티마이저 옵션에 따라 쿼리의 특성에 맞게 임시 테이블에도 인덱스를 추가해서 만들 수 있게 최적화 되었다.
+* 파생 테이블에 대해 최적화가 부족한 버전의 MySQL 서버를 사용 중일 경우, 가능하다면 DERIVED 형태의 실행 계획을 조인으로 해결할 수 있게 쿼리를 바꿔주는 것이 좋다.
+  * 8.0 버전부터는 FROM 절의 서브쿼리에 대한 최적화가 많이 개선되어 가능하다면 불필요한 서브쿼리는 조인으로 쿼리를 재작성해서 처리하지만, 옵티마이저가 처리할 수 있는 것은 한계가 있으므로 여전히 최적화 쿼리를 작성하는 것은 중요하다.
+
+> 쿼리를 튜닝하기 위해 실행 계획을 확인할 때 가장 먼저 select_type 컬럼의 값이 DERIVED인 것이 있는지 확인해야 한다.
+> 서브쿼리를 조인으로 해결할 수 있는 경우라면 조인으로 사용하는 것이 좋다.
+
+#### DEPENDENT DERIVED
+* MySQL 8.0 이전 버전에서는 FROM 절의 서브쿼리는 외부 컬럼을 사용할 수가 없었는데, 8.0 버전부터는 래터럴 조인(LATERAL JOIN) 기능이 추가되면서 FROM 절의 서브쿼리에서도 외부 컬럼을 참조할 수 있게 되었다.
+```sql
+SELECT *
+FROM employee e
+LEFT JOIN LATERAL 
+    ( 
+    SELECT *
+    FROM salaries s
+    WHERE s.emp_no = e.emp_no
+    ORDER BY s.from_date DESSC LIMIT 2 
+  ) AS s2 ON s2.emp_no = e.emp_no;
+```
+* 위 쿼리의 예시는 employees 테이블의 레코드 1건당 salaries 테이블의 레코드를 최근 순서대로 최대 2건까지만 가져와서 조인을 실행한다.
+* 래터럴 조인의 경우에는 LATERAL 키워드를 사용해야 하며, LATERAL 키워드가 없는 서브쿼리에서 외부 컬럼을 참조하면 오류가 발생한다.
+* 실행 계획에서는 select_type 컬럼에 DEPENDENT DERIVED 표시되는데, 해당 테이블이 래터럴 조인으로 사용된 것을 의미한다.
+
+#### UNCACHEABLE SUBQUERY
+* 하나의 쿼리 문장에 서브쿼리가 하나만 있더라도 실제 그 서브쿼리가 한 번만 실행되는 것은 아니다.
+* 조건이 똑같은 서브쿼리가 실행될 때는 다시 실행하지 않고 이전의 실행 결과를 그대로 사용할 수 있게 서브쿼리의 결과를 내부적인 캐시 공간에 담아둔다.
+  * 여기서 말하는 서브쿼리 캐시는 쿼리 캐시나 파생 테이블과는 무관한 기능이다.
+* SUBQUERY는 바깥쪽(Outer)의 영향을 받지 않으므로 처음 한 번만 실행해서 그 결과를 캐시하고 필요할 때 캐시된 결과를 이용한다.
+* DEPENDENT SUBQUERY는 의존하는 바깥쪽(Outer) 쿼리의 컬럼의 값 단위로 캐시하여 사용한다.
+* select_type이 SUBQUERY인 경우와 UNCACHEABLE SUBQUERY는 이 캐시를 사용할 수 있느냐 없느냐의 차이다.
+* 서브쿼리에 포함된 요소에 의해 캐시 자체가 불가능한 경우에 UNCACHEABLE SUBQUERY로 표시된다.
+* 캐시를 사용하지 못하게 하는 요소는 아래와 같다.
+  * 사용자 변수가 서브쿼리에 사용된 경우
+  * NOT-DETERMINISTIC 속성의 스토어드 루틴이 서브쿼리 내에 사용된 경우
+  * UUID()나 RAND()와 같이 결과값이 호출될 때마다 달라지는 함수가 서브쿼리에 사용된 경우
+
+#### UNCACHEABLE UNION
+* UNCACHEABLE UNION은 UNCACHEABLE과 UNION 키워드의 속성이 혼합된 것으로 맥락은 UNCACHEABLE SUBQUERY와 같다.
+
+#### MATERIALIZED
+* MySQL 5.6 버전부터 도입된 select_type으로, 주로 FROM 절이나 IN(subquery) 형태의 쿼리에 사용된 서브쿼리의 최적화를 위해 사용된다.
+* 5.6 버전까지는 IN(subquery)의 형태가 FROM 테이블을 읽어서 해당 레코드마다 subquery 테이블을 읽는 형태로 실행됐다.
+* 5.7 버전부터는 서브쿼리의 내용을 임시 테이블로 구체화한 후, 임시 테이블과 선행 테이블을 조인하는 형태로 최적화되어 처리된다.
+
+### table 컬럼
+* MySQL 서버의 실행 계획은 단위 SELECT 쿼리 기준이 아니라 테이블 기준으로 표시된다. 테이블의 이름에 별칭이 부여된 경우에는 별칭이 표시된다.
+* table 컬럼에 <derived N> 또는 <union M,N>과 같이 "<>"로 둘러싸인 이름이 명시되는 경우, 이 테이블은 임시 테이블임을 의미한다.
+* "<>"안에 항상 표시되는 숫자는 단위 SELECT 쿼리의 id 값을 지칭한다.
