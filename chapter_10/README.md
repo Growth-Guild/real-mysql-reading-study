@@ -429,3 +429,9 @@ WHERE first_name = 'Jasminko'; -- Jasminko는 사번에 10001인 사원의 first
 
 #### LooseScan
 * 세미 조인 최적화 중에서 LooseScan 최적화 전략이 사용되면 표시된다.
+
+#### No matching min/max row
+* 쿼리의 WHERE 조건절을 만족하는 레코드가 한 건도 없는 경우 일반적으로 "Impossible WHERE ..." 문장이 Extra 컬럼에 표시된다.
+* MIN()이나 MAX()와 같은 집합 함수가 있는 쿼리의 조건절에 일치하는 레코드가 한 건도 없을 때는 Extra 컬럼에 "No matching min/max row"라는 메시지가 출력된다.
+  * Min()이나 MAX()의 결과로는 NULL이 반환된다.
+
