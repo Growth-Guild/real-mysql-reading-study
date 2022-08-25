@@ -435,3 +435,57 @@ WHERE first_name = 'Jasminko'; -- Jasminko는 사번에 10001인 사원의 first
 * MIN()이나 MAX()와 같은 집합 함수가 있는 쿼리의 조건절에 일치하는 레코드가 한 건도 없을 때는 Extra 컬럼에 "No matching min/max row"라는 메시지가 출력된다.
   * Min()이나 MAX()의 결과로는 NULL이 반환된다.
 
+#### no matching row in const table
+```sql
+SELECT *
+FROM dept_emp de,
+     (SELECT emp_no FROM employees WHERE emp_no = 0) tb1
+ WHERE tb1.emp_no = de.emp_no AND de.dept_no = 'd005';
+```
+* 위 쿼리와 같이 조인에 사용된 테이블에서 const 방법으로 접근할 때 일치하는 레코드가 없다면 "no matching row in const table"이라는 메시지가 표시된다.
+* "Impossible WHERE ..."와 같은 종류로, 실행 계획을 만들기 위한 기초 자료가 없음을 의미한다.
+
+#### No matching rows after partition pruning
+* 파티션된 테이블에서 UPDATE하거나 DELETE할 대상 레코드가 없을 때 표시될 수 있다.
+* 해당 메시지는 처리할 레코드가 없음을 의미하는 것이 아니라 대상 파티션이 없다는 의미다.
+
+#### No tables used
+* FROM 절이 없는 쿼리 문장이나 "FROM DUAL" 형태의 쿼리 실행 계획에서 표시된다.
+  * 다른 DBMS와 달리 MySQL 서버는 FROM 절이 없는 쿼리도 허용된다.
+  * DUAL은 컬럼과 레코드를 각각 1개씩만 가지는 가상의 상수 테이블이다.
+
+#### Not exists
+* A 테이블에는 존재하지만 B 테이블에는 없는 값을 조회해야 하는 쿼리가 사용될 때가 있는데, 이럴 때는 NOT IN(subquery) 형태난 NOT EXISTS 연산자를 주로 사용한다.
+  * 이러한 형태의 조인을 안티-조인이라고 한다.
+  * 똑같은 처리를 위해 LEFT OUTER JOIN을 이용해서 구현할 수도 있다.
+* 일반적으로 NOT IN(subquery)이나 NOT EXISTS 등의 연산자를 사용하는 안티-조인으로 처리해야 하지만 레코드의 건수가 많을 때는 아우터 조인을 이용하면 빠른 성능을 낼 수 있다.
+* 아우터 조인을 이용해 안티-조인을 수행하는 쿼리에서 실행 계획의 Extra 컬럼에 "Not exists" 메시지가 표시된다.
+  * 아우터 조인 테이블에 조인 조건에 일치하는 레코드가 여러 건이 있다고 하더라도 딱 1건만 조회해보고 처리를 완료하여 최적화한다.
+
+#### Plan isn't ready yet
+* MySQL 8.0 버전에서는 다른 커넥션에서 실행 중인 쿼리의 실행 계획을 살펴볼 수 있다.
+```sql
+SHOW PROCESSLIST; -- 이 명령으로 현재 연결된 커넥션들의 상태를 확인할 수 있다.
+
+EXPLAIN FOR CONNECTION 8; -- 여기서 8은 SHOW PROCESSLIST 명령으로 확인한 커넥션 id(프로세스 번호)로, 해당 커넥션에서 실행하고 있는 쿼리의 실행 계획을 살펴볼 수 있다.
+```
+* EXPLAIN FOR CONNECTION 명령을 실행했을 때, Extra 컬럼에 "Plain isn't ready yet" 메시지가 표시될 떄는 해당 커넥션에서 아직 실행 계획을 수립하지 못한 상태라는 뜻이다.
+
+#### Range checked for each record(index map: N)
+```sql
+SELECT *
+FROM employees e1, employees e2
+where e2.emp_no >= e1.emp_no;
+```
+* 위와 같이 두 테이블을 조인하는 경우에 옵티마이저가 e1 테이블을 먼저 읽고, 조인을 위해 e2를 읽을 때 인덱스 레인지 스캔과 풀 테이블 스캔 중에서 어느 것이 효율적일지 판단할 수 없가.
+  * e1 테이블의 레코드를 하나씩 읽을 때마다 e1.emp_no 값이 계속 바뀌므로 쿼리의 비용 계산을 위한 기존 값이 계속 변하기 때문이다.
+* e1 테이블의 emp_no 값의 크기에 따라 e2 에서 읽어들여야 할 레코드의 크기가 달라진다.
+  * 사번이 1부터 1억 번까지 있다고 할 때, e1.emp_no=1인 경우에는 e2 테이블에서 1억건 전부를 읽어야 한다. e1.emp_no=100000000인 경우에는 e2 테이블을 한 건만 읽으면 된다.
+* 그래서 e1 테이블의 emp_no가 작을 때는 e2 테이블을 풀 테이블 스캔으로 접근하고, e1 테이블의 emo_no가 큰 값을 때는 e2 테이블을 인덱스 레인지 스캔으로 접근하는 형태로 최적화한다.
+* 이는 레코드마다 인덱스 레인지 스캔을 체크한다는 의미인데, 이것이 Extra 컬럼에 표시되는 "Range checked for each record"이다.
+* (index map: N)은 사용할지 말지를 판단하는 후보 인덱스의 순번을 나타낸다.
+  * "index map"은 16진수로 표시되는데, 해석을 위해 2진수로 변환해야 한다.
+  * 2진수로 변환된 N 값은 뒤에서부터 순서대로 "SHOW CREATE TABLE employees" 명령으로 나타나는 인덱스의 후보 여부를 나타낸다.
+* "Range checked for each record"가 표시되면 type 컬럼은 ALL로 표시된다.
+  * "index map"에 표시된 후보 인덱스가 효율적이지 못하면 풀 테이블 스캔을 사용하기 때문에 ALL로 표시된 것이다.
+* 각 레코드 단위로 후보 인덱스 가운데 어떤 인덱스를 사용할지 결정하게 되는데, 실제로 어떤 인덱스가 사용됐는지는 알 수 없다.
