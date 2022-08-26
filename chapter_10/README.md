@@ -576,3 +576,41 @@ SELECT * FROM cte;
 
 #### Using index for skip scan
 * 옵티마이저가 인덱스 스킵 스캔 최적화를 사용하면 Extra 컬럼에 "Using index for skip scan" 메시지를 표시한다.
+
+#### Using join buffer(Block nested Loop), Using join buffer(Batched Key Access), Using join buffer(hash join)
+* 조인에 필요한 인덱스는 조인되는 양쪽 테이블 컬럼 모두가 아니라 조인 뒤에서 읽는 드리븐 테이블에만 필요하다.
+* 드리븐 테이블에 검색을 위한 적절한 인덱스가 없다면 MySQL 서버는 블록 네스티드 루프 조인이나 해시 조인을 사용한다.
+* 블록 네스티드 루프 조인이나 해시 조인을 사용하면 MySQL 서버는 조인 버퍼를 사용한다.
+* 조인 버퍼가 사용되면 Extra 컬럼에는 "Using join buffer" 문구가 표시된다.
+* MySQL 5.6 버전부터는 "Using join buffer" 문구에 "Batched Key Access"나 "Hash join"과 같은 조인 알고리즘이 추가로 표시된다.
+
+#### Using MRR
+* MySQL 엔진은 여러 개의 키 값을 한 번에 스토리지 엔진으로 전달하고, 스토리지 엔진은 넘겨받은 키 값들을 정렬해서 최소한의 페이지만 접근하여 레코드를 읽을 수 있도록 하는 최적화가 MRR(Multi Range Read)이다.
+
+#### Using sort_union(...), Using union(...), Using intersect(...)
+* 쿼리가 inext_merge 접근 방법(실행 계획의 type 컬럼의 값이 index_merge)으로 실행되는 경우에 2개 이상의 인덱스가 동시에 사용될 수 있다.
+  * Using intersect(...): 각 인덱스를 사용할 수 있는 조건이 AND로 연결된 경우 각 처리 결과에서 교집합을 추출한다.
+  * Using union(...): 각 인덱스를 사용할 수 있는 조건이 OR로 연결된 경우 각 처리 결과에서 합집합을 추출해내는 작업을 수행했다는 의미이다.
+  * Using sort_union(...): Using union과 같은 작업을 수행하지만 Using union으로 처리될 수 없는 경우 이 방식으로 처리된다. Using sort_union과 Using union의 차이점은 Using sort_union은 프라이머리 키만 먼저 읽어서 정렬하고 병합한 이후 레코드를 읽어서 반환할 수 있다는 점이다.
+* 레코드 건수에 관계없이 각 WHERE 조건에 사용된 비교 조건이 모두 동등 조건이면 Using union()이 사용되며, 그렇지 않으면 Using sort_union()이 사용된다.
+
+#### Using temporary
+* 쿼리를 처리하는 동안 중간 결과를 담아두기 위해 임시 테이블을 사용할 때는 Extra 컬럼에 "Using temporary"가 표시된다.
+* 임시 테이블은 메모리상에 생성될 수도 있고, 디스크상에 생성될 수도 있다.
+* 임시 테이블은 실행 계획만으로는 메모리에 생성됐는지, 디스크에 생성됐는지는 판단할 수 없다.
+* 실행 계획에는 Extra 컬럼에 "Using temporary"가 표시되지는 않지만, 실제 내부적으로는 임시 테이블을 사용할 떄도 많다.
+  * "Using temporary"가 표시되지 않았다고 해서 임시 테이블을 사용하지 않는다고 판단해서는 안된다.
+  * FROM 절에 사용된 서브 쿼리는 무조건 임시 테이블을 생성한다. (파생 테이블이라고 부른다.)
+  * "COUNT(DISTINCT column1)"를 포함하는 쿼리도 인덱스를 사용할 수 없는 경우에 임시 테이블이 만들어진다.
+  * UNION이나 UNION DISTICT가 사용된 쿼리도 항상 임시 테이블을 사용해 결과를 병합한다. (MySQL 8.0 버전부터 UNION ALL이 사용된 경우에는 더이상 내부 임시 테이블을 사용하지 않도록 개선됨)
+  * 인덱스를 사용하지 못하는 정렬 작업은 임시 버퍼 공간을 사용하는데, 정렬해야 할 레코드가 많아지면 결국 디스크를 사용한다. 정렬에 사용되는 버퍼도 임시 테이블과 같다. (쿼리가 정렬을 수행할 때는 "Using filesort"가 표시된다.)
+
+#### Using where
+* 스토리지 엔진은 디스크나 메모리 상에서 필요한 레코드를 읽거나 저장하는 역할을 하며, MySQL 엔진은 스토리지 엔진으로부터 받은 레코드를 가공 또는 연산하는 작업을 수행한다.
+* MySQL 엔진 레이어에서 별도의 가공을 해서 필터링 작업을 처리한 경우에만 Extra 컬럼에 "Using where"가 표시된다.
+* MySQL 8.0 버전부터 filtered 컬럼이 같이 표시되므로 "Using where"가 성능상의 문제를 일으킬지 아닐지 알아낼 수 있다.
+
+#### Zero limit
+* 때로는 MySQL 서버에서 데이터 값이 아닌 쿼리 결과값의 메타데이터만 필요한 경우가 있는데, 이런 경우에는 쿼리의 마지막에 "LIMIT 0"을 사용하면 된다.
+* MySQL 옵티마이저는 사용자가 메타 정보만 조회하고자 하는 의도를 알아채고 실제 테이블의 레코드는 전혀 읽지 않고 결과값의 메타 정보만 반환한다.
+* Extra 컬럼에 "Zero limit"가 표시된다.
