@@ -412,10 +412,10 @@ where e.emp_no IN
 
 #### 중복 제거 (Duplicated Weed-out)
 * Duplicate Weedout은 세미 조인 서브쿼리를 일반적인 INNER JOIN 쿼리로 바꿔서 실행하고 마지막에 중복된 레코드를 제거하는 방법으로 처리되는 최적화 알고리즘이다.
-* Duplicate Weedout 최적화 알고리즘은 원본 쿼리를 INNER JOIN + GROUP BY 절로 바꿔서 실행하는 것과 도잉ㄹ한 작업으로 쿼리를 처리한다.
+* Duplicate Weedout 최적화 알고리즘은 원본 쿼리를 INNER JOIN + GROUP BY 절로 바꿔서 실행하는 것과 동일한 작업으로 쿼리를 처리한다.
 * 조인된 결과는 임시 테이블을 이용하여 저장해두고 저장된 결과에서 중복을 제거한다.
 * 실행 계획에서 "Duplicate Weed"이라는 문구가 표시되지는 않지만, Extra 컬럼에 "Start temporary"와 "End temporary" 문구가 별도로 표기된다.
-* 조인을 수행하며 임시 ㅌ네이블로 저장하는 작업은 반복적으로 실행되는 과정이며, 반복 과정에서 시작되는 테이블의 실행 계획 라인에는 "Start temporary" 문구가, 반복 과정이 끝나는 테이블의 실행 계획 라인에는 "End temporary" 문구가 표시된다.
+* 조인을 수행하며 임시 테이블로 저장하는 작업은 반복적으로 실행되는 과정이며, 반복 과정에서 시작되는 테이블의 실행 계획 라인에는 "Start temporary" 문구가, 반복 과정이 끝나는 테이블의 실행 계획 라인에는 "End temporary" 문구가 표시된다.
 * 서브쿼리가 상관 서브쿼리라고 하더라도 사용할 수 있는 최적화다.
 * 서브쿼리가 GROUP BY나 집합 함수가 사용된 경우에는 사용될 수 없다.
 * Duplicate Weedout은 서브쿼리의 테이블을 조인으로 처리하기 때문에 최적화할 수 있는 방법이 많다.
